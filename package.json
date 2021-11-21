@@ -1,6 +1,6 @@
 {
   "name": "vscode-k8s-quick-attach",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "",
   "main": "./out/extension.js",
   "publisher": "mtsmfm",
@@ -31,7 +31,7 @@
     "commands": [
       {
         "command": "vscode-k8s-quick-attach.quickAttach",
-        "title": "Quick Attach k8s Pod"
+        "title": "k8s quick attach: Quick Attach k8s Pod"
       }
     ]
   },
