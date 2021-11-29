@@ -1,7 +1,7 @@
 {
   "name": "vscode-k8s-quick-attach",
-  "version": "0.2.0",
-  "description": "",
+  "version": "0.3.0",
+  "description": "This extension provide a quick way to attach VSCode to k8s Pod",
   "main": "./out/extension.js",
   "publisher": "mtsmfm",
   "scripts": {
@@ -40,5 +40,9 @@
   ],
   "engines": {
     "vscode": "^1.52.0"
-  }
+  },
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ]
 }
