@@ -17,7 +17,7 @@ interface GetPodResult {
 }
 
 const settingKey = (pod: GetPodResult["items"][0], containerName: string) => {
-  const LABELS_TO_IGNORE = ["pod-template-hash"];
+  const LABELS_TO_IGNORE = ["pod-template-hash", "rollouts-pod-template-hash"];
 
   const labels = Object.entries(pod.metadata.labels).filter(
     ([k, _]) => !LABELS_TO_IGNORE.includes(k)

@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.4.0
+
+- Consider argo rollout
+
 ## v0.3.0
 
 - Specify extensionKind
