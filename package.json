@@ -1,12 +1,12 @@
 {
   "name": "vscode-k8s-quick-attach",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "This extension provide a quick way to attach VSCode to k8s Pod",
   "main": "./out/extension.js",
   "publisher": "mtsmfm",
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild src/extension.ts --bundle --outdir=out --external:vscode --sourcemap --platform=node"
+    "compile": "esbuild src/extension.ts --bundle --outdir=out --external:vscode --external:shelljs --sourcemap --platform=node"
   },
   "repository": {
     "type": "git",
@@ -44,5 +44,8 @@
   "extensionKind": [
     "ui",
     "workspace"
-  ]
+  ],
+  "dependencies": {
+    "@kubernetes/client-node": "^0.16.1"
+  }
 }

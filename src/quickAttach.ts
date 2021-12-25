@@ -1,31 +1,17 @@
 import { commands, ExtensionContext, Uri, window } from "vscode";
-import * as cp from "child_process";
+import * as k8s from "@kubernetes/client-node";
+import { age, showQuickPick } from "./utils";
 
-interface GetPodResult {
-  items: Array<{
-    metadata: {
-      name: string;
-      namespace: string;
-      labels: { [key: string]: string };
-    };
-    spec: {
-      containers: Array<{
-        name: string;
-      }>;
-    };
-  }>;
-}
-
-const settingKey = (pod: GetPodResult["items"][0], containerName: string) => {
+const settingKey = (pod: k8s.V1Pod, containerName: string) => {
   const LABELS_TO_IGNORE = ["pod-template-hash", "rollouts-pod-template-hash"];
 
-  const labels = Object.entries(pod.metadata.labels).filter(
+  const labels = Object.entries(pod.metadata!.labels!).filter(
     ([k, _]) => !LABELS_TO_IGNORE.includes(k)
   );
 
   return `pod-${JSON.stringify({
     labels,
-    namespace: pod.metadata.namespace,
+    namespace: pod.metadata!.namespace,
     containerName,
   })}`;
 };
@@ -35,44 +21,81 @@ interface Setting {
 }
 
 export async function quickAttach(context: ExtensionContext) {
-  const getPodResult: GetPodResult = JSON.parse(
-    cp.execSync("kubectl get pod -o json").toString()
-  );
+  const kc = new k8s.KubeConfig();
+  kc.loadFromDefault();
 
-  const podNames = getPodResult.items.map((i) => i.metadata.name);
-
-  const podName = await window.showQuickPick(podNames, {
-    placeHolder: "Select Pod",
+  const targetContextName = await showQuickPick({
+    placeholder: "Select Context",
+    items: kc.contexts.map((c) => ({
+      label: c.name,
+    })),
+    activeItemLabel: kc.currentContext,
   });
 
-  if (!podName) {
+  if (!targetContextName) {
     return;
   }
 
-  const podData = getPodResult.items.find((i) => i.metadata.name === podName)!;
-  const namespace = podData.metadata.namespace;
+  kc.setCurrentContext(targetContextName);
+  const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
 
-  const containerNames = podData.spec.containers.map((c) => c.name);
-  const containerName =
+  const namespaces = (await k8sApi.listNamespace()).body.items.map(
+    (i) => i.metadata?.name!
+  );
+
+  const defaultNamespace =
+    kc.contexts.find((c) => c.name === targetContextName)!.namespace ||
+    namespaces.find((n) => n === "default");
+
+  const targetNamespace = await showQuickPick({
+    placeholder: "Select Namespace",
+    items: namespaces.map((n) => ({ label: n })),
+    activeItemLabel: defaultNamespace,
+  });
+
+  if (!targetNamespace) {
+    return;
+  }
+
+  const pods = (await k8sApi.listNamespacedPod(targetNamespace)).body.items;
+
+  const targetPodname = await showQuickPick({
+    placeholder: "Select Pod",
+    items: pods.map((i) => ({
+      label: i.metadata?.name!,
+      description: `status: ${i.status?.phase}, age: ${age(
+        i.status?.startTime!
+      )}`,
+    })),
+    activeItemLabel: defaultNamespace,
+  });
+
+  if (!targetPodname) {
+    return;
+  }
+
+  const targetPod = pods.find((p) => p.metadata?.name === targetPodname)!;
+  const containerNames = targetPod.spec!.containers.map((c) => c.name);
+  const targetContainerName =
     containerNames.length === 1
       ? containerNames[0]
       : await window.showQuickPick(containerNames, {
-          placeHolder: `Select Container in ${podName}`,
+          placeHolder: `Select Container in ${targetPodname}`,
         });
 
-  if (!containerName) {
+  if (!targetContainerName) {
     return;
   }
 
   const data = {
-    // context: k8sContext,
-    podname: podName,
-    namespace,
-    name: containerName,
+    context: targetContextName,
+    podname: targetPodname,
+    namespace: targetNamespace,
+    name: targetContainerName,
     // image: image
   };
 
-  const key = settingKey(podData, containerName);
+  const key = settingKey(targetPod, targetContainerName);
   const { path: lastSelectedPath } = context.globalState.get<Setting>(key) || {
     path: undefined,
   };
@@ -81,6 +104,10 @@ export async function quickAttach(context: ExtensionContext) {
     value: lastSelectedPath,
     placeHolder: "Input path",
   });
+
+  if (!path) {
+    return;
+  }
 
   context.globalState.update(key, { path });
 

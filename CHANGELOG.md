@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.5.0
+
+- Avoid using default context/namespace
+
 ## v0.4.0
 
 - Consider argo rollout
