@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.6.0
+
+- Avoid showing not running pod
+
 ## v0.5.0
 
 - Avoid using default context/namespace

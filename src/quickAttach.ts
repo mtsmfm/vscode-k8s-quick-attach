@@ -61,12 +61,14 @@ export async function quickAttach(context: ExtensionContext) {
 
   const targetPodname = await showQuickPick({
     placeholder: "Select Pod",
-    items: pods.map((i) => ({
-      label: i.metadata?.name!,
-      description: `status: ${i.status?.phase}, age: ${age(
-        i.status?.startTime!
-      )}`,
-    })),
+    items: pods
+      .filter((i) => i.status?.phase === "Running")
+      .map((i) => ({
+        label: i.metadata?.name!,
+        description: `status: ${i.status?.phase}, age: ${age(
+          i.status?.startTime!
+        )}`,
+      })),
     activeItemLabel: defaultNamespace,
   });
 
