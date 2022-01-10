@@ -1,4 +1,4 @@
-import { commands, ExtensionContext } from "vscode";
+import { commands, ExtensionContext, window } from "vscode";
 import { quickAttach } from "./quickAttach";
 
 export function activate(context: ExtensionContext) {
@@ -6,7 +6,17 @@ export function activate(context: ExtensionContext) {
     commands.registerCommand(
       "vscode-k8s-quick-attach.quickAttach",
       async () => {
-        quickAttach(context);
+        try {
+          await quickAttach(context);
+        } catch (e) {
+          if (typeof e === "string") {
+            window.showErrorMessage(e);
+          } else if (e instanceof Error) {
+            window.showErrorMessage(e.message);
+          } else {
+            console.error(e);
+          }
+        }
       }
     )
   );

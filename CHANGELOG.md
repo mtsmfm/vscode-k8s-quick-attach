@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.7.0
+
+- Show error message
+
 ## v0.6.0
 
 - Avoid showing not running pod
