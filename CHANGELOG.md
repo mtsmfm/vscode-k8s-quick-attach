@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.8.0
+
+- Consider StatefulSet
+
 ## v0.7.0
 
 - Show error message

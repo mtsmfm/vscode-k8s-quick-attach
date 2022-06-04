@@ -3,7 +3,11 @@ import * as k8s from "@kubernetes/client-node";
 import { age, showQuickPick } from "./utils";
 
 const settingKey = (pod: k8s.V1Pod, containerName: string) => {
-  const LABELS_TO_IGNORE = ["pod-template-hash", "rollouts-pod-template-hash"];
+  const LABELS_TO_IGNORE = [
+    "pod-template-hash",
+    "rollouts-pod-template-hash",
+    "controller-revision-hash",
+  ];
 
   const labels = Object.entries(pod.metadata!.labels!).filter(
     ([k, _]) => !LABELS_TO_IGNORE.includes(k)
