@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.9.0
+
+- Attach to Deployment
+
 ## v0.8.0
 
 - Consider StatefulSet

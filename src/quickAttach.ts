@@ -2,20 +2,32 @@ import { commands, ExtensionContext, Uri, window } from "vscode";
 import * as k8s from "@kubernetes/client-node";
 import { age, showQuickPick } from "./utils";
 
-const settingKey = (pod: k8s.V1Pod, containerName: string) => {
+type Target =
+  | { kind: "pod"; pod: k8s.V1Pod }
+  | { kind: "deployment"; namespace: string; name: string };
+
+const settingKey = (target: Target, containerName: string) => {
+  if (target.kind === "deployment") {
+    return `deployment-${JSON.stringify({
+      name: target.name,
+      namespace: target.namespace,
+      containerName,
+    })}`;
+  }
+
   const LABELS_TO_IGNORE = [
     "pod-template-hash",
     "rollouts-pod-template-hash",
     "controller-revision-hash",
   ];
 
-  const labels = Object.entries(pod.metadata!.labels!).filter(
-    ([k, _]) => !LABELS_TO_IGNORE.includes(k)
+  const labels = Object.entries(target.pod.metadata!.labels!).filter(
+    ([k, _]) => !LABELS_TO_IGNORE.includes(k),
   );
 
   return `pod-${JSON.stringify({
     labels,
-    namespace: pod.metadata!.namespace,
+    namespace: target.pod.metadata!.namespace,
     containerName,
   })}`;
 };
@@ -23,6 +35,8 @@ const settingKey = (pod: k8s.V1Pod, containerName: string) => {
 interface Setting {
   path: string;
 }
+
+const DEPLOYMENT_PREFIX = "deployment/";
 
 export async function quickAttach(context: ExtensionContext) {
   const kc = new k8s.KubeConfig();
@@ -42,9 +56,10 @@ export async function quickAttach(context: ExtensionContext) {
 
   kc.setCurrentContext(targetContextName);
   const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+  const appsApi = kc.makeApiClient(k8s.AppsV1Api);
 
   const namespaces = (await k8sApi.listNamespace()).body.items.map(
-    (i) => i.metadata?.name!
+    (i) => i.metadata?.name!,
   );
 
   const defaultNamespace =
@@ -61,32 +76,60 @@ export async function quickAttach(context: ExtensionContext) {
     return;
   }
 
-  const pods = (await k8sApi.listNamespacedPod(targetNamespace)).body.items;
+  const [pods, deployments] = await Promise.all([
+    k8sApi.listNamespacedPod(targetNamespace).then((r) => r.body.items),
+    appsApi.listNamespacedDeployment(targetNamespace).then((r) => r.body.items),
+  ]);
 
-  const targetPodname = await showQuickPick({
-    placeholder: "Select Pod",
-    items: pods
-      .filter((i) => i.status?.phase === "Running")
-      .map((i) => ({
-        label: i.metadata?.name!,
-        description: `status: ${i.status?.phase}, age: ${age(
-          i.status?.startTime!
-        )}`,
-      })),
-    activeItemLabel: defaultNamespace,
+  const deploymentItems = deployments
+    .filter((d) => (d.status?.availableReplicas ?? 0) > 0)
+    .map((d) => ({
+      label: `${DEPLOYMENT_PREFIX}${d.metadata!.name!}`,
+      description: `available: ${d.status?.availableReplicas ?? 0}/${
+        d.spec?.replicas ?? 0
+      }, age: ${age(d.metadata?.creationTimestamp!)}`,
+    }));
+
+  const podItems = pods
+    .filter((i) => i.status?.phase === "Running")
+    .map((i) => ({
+      label: i.metadata?.name!,
+      description: `status: ${i.status?.phase}, age: ${age(
+        i.status?.startTime!,
+      )}`,
+    }));
+
+  const targetLabel = await showQuickPick({
+    placeholder: "Select Deployment or Pod",
+    items: [...deploymentItems, ...podItems],
   });
 
-  if (!targetPodname) {
+  if (!targetLabel) {
     return;
   }
 
-  const targetPod = pods.find((p) => p.metadata?.name === targetPodname)!;
-  const containerNames = targetPod.spec!.containers.map((c) => c.name);
+  let target: Target;
+  let containerNames: string[];
+  let podnameValue: string;
+
+  if (targetLabel.startsWith(DEPLOYMENT_PREFIX)) {
+    const name = targetLabel.slice(DEPLOYMENT_PREFIX.length);
+    const dep = deployments.find((d) => d.metadata?.name === name)!;
+    target = { kind: "deployment", namespace: targetNamespace, name };
+    containerNames = dep.spec!.template!.spec!.containers.map((c) => c.name);
+    podnameValue = `deployment/${name}`;
+  } else {
+    const pod = pods.find((p) => p.metadata?.name === targetLabel)!;
+    target = { kind: "pod", pod };
+    containerNames = pod.spec!.containers.map((c) => c.name);
+    podnameValue = targetLabel;
+  }
+
   const targetContainerName =
     containerNames.length === 1
       ? containerNames[0]
       : await window.showQuickPick(containerNames, {
-          placeHolder: `Select Container in ${targetPodname}`,
+          placeHolder: `Select Container in ${targetLabel}`,
         });
 
   if (!targetContainerName) {
@@ -95,13 +138,13 @@ export async function quickAttach(context: ExtensionContext) {
 
   const data = {
     context: targetContextName,
-    podname: targetPodname,
+    podname: encodeURIComponent(podnameValue),
     namespace: targetNamespace,
     name: targetContainerName,
     // image: image
   };
 
-  const key = settingKey(targetPod, targetContainerName);
+  const key = settingKey(target, targetContainerName);
   const { path: lastSelectedPath } = context.globalState.get<Setting>(key) || {
     path: undefined,
   };
