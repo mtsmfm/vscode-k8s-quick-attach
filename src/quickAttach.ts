@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { commands, ExtensionContext, Uri, window } from "vscode";
 import * as k8s from "@kubernetes/client-node";
 import { age, showQuickPick } from "./utils";
@@ -39,8 +41,21 @@ interface Setting {
 const DEPLOYMENT_PREFIX = "deployment/";
 
 export async function quickAttach(context: ExtensionContext) {
+  const kubeDir = path.join(process.env.HOME || "", ".kube");
+  const configFiles = fs
+    .readdirSync(kubeDir)
+    .filter((f) => f.startsWith("config"));
+
+  const selectedConfig = await showQuickPick({
+    placeholder: "Select kubeconfig file",
+    items: configFiles.map((f) => ({ label: f })),
+    activeItemLabel: "config",
+  });
+
+  if (!selectedConfig) return;
+
   const kc = new k8s.KubeConfig();
-  kc.loadFromDefault();
+  kc.loadFromFile(path.join(kubeDir, selectedConfig));
 
   const targetContextName = await showQuickPick({
     placeholder: "Select Context",
@@ -149,23 +164,23 @@ export async function quickAttach(context: ExtensionContext) {
     path: undefined,
   };
 
-  const path = await window.showInputBox({
+  const targetPath = await window.showInputBox({
     value: lastSelectedPath,
     placeHolder: "Input path",
   });
-
-  if (!path) {
+  
+  if (!targetPath) {
     return;
   }
-
-  context.globalState.update(key, { path });
-
+  
+  context.globalState.update(key, { path: targetPath });
+  
   const uri = Uri.from({
     scheme: "vscode-remote",
     authority: `k8s-container+${Object.entries(data)
       .map((xs) => xs.join("="))
       .join("+")}`,
-    path,
+    path: targetPath,
   });
 
   await commands.executeCommand("vscode.openFolder", uri, {
